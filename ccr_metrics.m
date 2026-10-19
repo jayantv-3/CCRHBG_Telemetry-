@@ -1,0 +1,13 @@
+function metrics = ccr_metrics(data)
+% Time-weighted metrics support nonuniform sample intervals.
+t = data.time_s; duration = t(end)-t(1);
+speed = data.speed_kmh; lateral = data.lateral_g;
+values = [height(data); duration; max(speed); trapz(t,speed)/duration; ...
+    trapz(t,speed/3.6); max(abs(lateral)); max(lateral); min(lateral); ...
+    sqrt(trapz(t,lateral.^2)/duration); median(diff(t)); max(diff(t))];
+names = {'sample_count';'duration';'maximum_speed';'time_weighted_mean_speed'; ...
+    'speed_integrated_distance';'peak_absolute_lateral_g';'maximum_signed_lateral_g'; ...
+    'minimum_signed_lateral_g';'time_weighted_rms_lateral_g';'median_sample_interval';'largest_sample_gap'};
+units = {'samples';'s';'km/h';'km/h';'m';'g';'g';'g';'g';'s';'s'};
+metrics = table(names,values,units,'VariableNames',{'metric','value','unit'});
+end
