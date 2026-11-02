@@ -1,141 +1,232 @@
-# Capital College Racing — Vehicle Telemetry Analyzer v1.0
+# CCR Telemetry
 
-Scope: GPS path, vehicle speed, and cornering (lateral) g only. No extra MATLAB toolboxes, online maps, ECU connection, or hardware drivers are required. Intended for base MATLAB R2020a or newer with desktop graphics. GNU Octave compatibility is not claimed.
+A MATLAB telemetry project for Capital College Racing, focused on vehicle speed, lateral acceleration, and GPS position.
 
-## Start here
+The project started with synthetic data so development could begin before recorded car data was available. It now also includes a viewer that reads measurements from an iPhone running phyphox and displays them in MATLAB.
 
-1. Extract the ZIP to a folder you can write to.
-2. Open MATLAB. In the Current Folder panel, navigate to the extracted `CCR_Telemetry_Analyzer_v1` folder containing the `.m` files. Alternatively use `cd('C:\your\folder\CCR_Telemetry_Analyzer_v1')` on Windows, replacing the path with your actual folder.
-3. Type `run_demo` in the Command Window and press Enter, or open `run_demo.m` and click Run.
-4. A dashboard opens. The Command Window displays metrics and the full results folder path. Every run creates a separate folder beneath `results`.
-5. Use the figure toolbar to zoom, pan, and inspect points. Speed and lateral-g time plots share a linked time axis. Close the figure when finished.
+This is an early prototype. The aim is to learn how to collect useful measurements, check their units, and understand what the graphs can tell us before adding more vehicle channels.
 
-The demo banner says **SYNTHETIC DEMO — NOT CAR MEASUREMENTS**. Nothing in this demo is measured on CCR's car.
+## What’s included
 
-## Exact commands
+There are two ways to use the project:
+
+| Mode | What it does | Command |
+|---|---|---|
+| Phone viewer | Displays speed, sideways acceleration, and a GPS path from phyphox | `ccr_phone_live_fixed` |
+| Demo and CSV analyzer | Generates synthetic data or imports a CSV, calculates metrics, and exports results | `run_demo` or `ccr_analyzer` |
+
+The phone viewer uses measurements from the phone. The demo uses generated data, clearly marked as synthetic. The demo does not represent measurements from CCR’s car.
+
+## Requirements
+
+- Desktop MATLAB R2020a or newer, with graphics support. No additional toolboxes are required by this code.
+- For the phone viewer: an iPhone with phyphox installed.
+- A network connection that allows the laptop to reach the phone directly.
+
+The live viewer uses desktop dialogs and is not intended to run in MATLAB Mobile. Compatibility across the stated MATLAB versions has not been fully tested.
+
+## Quick start: synthetic demo
+
+Download the repository, extract it if needed, and set MATLAB’s Current Folder to the folder containing the `.m` files. Keep the files together; you do not need to open each one.
+
+In the Command Window, beside `>>`, enter:
 
 ```matlab
 run_demo
-% Same demo, without clearing your workspace:
-result = ccr_analyzer();
-
-% Import the supplied sample (also synthetic):
-result = ccr_analyzer('sample_SYNTHETIC.csv');
-
-% Import your prepared canonical CSV (replace the file path):
-result = ccr_analyzer('C:\Users\YourName\Documents\test_run.csv');
-
-% Choose the parent export folder:
-result = ccr_analyzer('test_run.csv', 'my_results');
-
-% Export plots without displaying their window:
-result = ccr_analyzer('sample_SYNTHETIC.csv', 'my_results', false);
-
-% Inspect returned tables:
-result.data
-result.metrics
-result.outputDirectory
-
-% Generate another identical demo CSV:
-writetable(ccr_generate_demo(), 'another_SYNTHETIC.csv');
-
-% Run the included acceptance tests:
-ccr_self_test
 ```
 
-All `.m` files must be in the Current Folder or on MATLAB's path. Paths may contain spaces when enclosed in quotes. Outputs require a writable folder. A false `showPlots` still creates and exports an invisible figure; graphics support is required.
+The demo opens a dashboard and writes results into a new folder under `results`. MATLAB prints the full output location in the Command Window.
 
-## CSV contract and units
+The dashboard shows speed against time, lateral g against time, a GPS path coloured by speed, and speed against lateral g. The figure toolbar lets you zoom and inspect points.
 
-Use a comma-delimited text file with exactly one header row, then one synchronized sample per row. Required headers are case sensitive. Their suffixes declare units; there is no separate units row. Extra columns are ignored and excluded from processed exports. Required columns may appear in any order.
+## Live measurements from an iPhone
 
-| Header | Meaning and required units | Accepted range |
+### Set up phyphox
+
+Create a simple experiment with both **Location/GPS** and **Linear Acceleration**, also called acceleration without g. Set the acceleration sensor rate to 50 Hz. GPS will update at its own slower rate.
+
+The fixed viewer expects the channel names confirmed during setup:
+
+| Phone channel | Measurement | Raw unit |
 |---|---|---|
-| `time_s` | Numeric elapsed/log time in seconds; first sample need not be zero | Nonnegative, strictly increasing |
-| `speed_kmh` | Nonnegative vehicle speed in kilometres per hour | 0–300 |
+| `gpsV` | GPS speed | m/s |
+| `lin_accX` | Linear acceleration along the phone’s X axis | m/s² |
+| `gpsLat` | Latitude | Decimal degrees |
+| `gpsLon` | Longitude | Decimal degrees |
+
+If your experiment uses different names, the viewer needs adapting. Opening the built-in GPS experiment alone will not provide acceleration.
+
+Enable **Allow remote access** in phyphox. Keep the app open and press Play to start recording.
+
+### Connect the laptop
+
+For this version, the laptop and phone must share a reachable local network. A phone hotspot is an alternative to shared Wi-Fi. Campus networks may prevent devices from communicating even when both use the same Wi-Fi name.
+
+Open the exact address displayed by phyphox in the laptop’s browser first. Include `http://` and any port number. The address can change when you change networks.
+
+Then, in MATLAB’s Command Window, run:
+
+```matlab
+ccr_phone_live_fixed
+```
+
+Paste the current phone address into the prompt. The viewer automatically selects the four channels listed above.
+
+To pass the address directly, use this format, replacing the example address with the one on your phone:
+
+```matlab
+ccr_phone_live_fixed('http://192.168.1.20')
+```
+
+One MATLAB figure displays:
+
+- Speed against time, in km/h.
+- Sideways acceleration against time, in g.
+- An approximate GPS path, with a red dot marking the latest received position.
+
+Close the figure to stop the viewer. Stop the recording separately in phyphox.
+
+### Position the phone
+
+For X acceleration to represent sideways vehicle motion, mount the phone securely **flat, screen up, with its top edge pointing toward the front of the vehicle**. Check the axis and sign with a gentle controlled test before interpreting turns.
+
+The viewer uses the supplied acceleration without changing its sign or calibrating it. Tilt, mounting movement, sensor bias, vibration, and the phone’s gravity-removal estimate can affect the reading. Have a passenger handle the equipment during a moving test.
+
+### What the live display actually shows
+
+The viewer requests the latest values, waits 0.2 seconds after each update, and repeats. That gives up to roughly five updates per second, depending on network response. It does not retrieve every 50 Hz acceleration sample.
+
+The time axis is elapsed time on the laptop when values arrive, not the original sensor timestamps. Speed, acceleration, and coordinates can update at different rates. A repeated value does not necessarily mean a fresh measurement arrived.
+
+The time graphs display a rolling 60-second window. The GPS path accumulates changed positions received during the viewer session. It is a local path drawing, not a satellite or road map. GPS drift can make a stationary phone appear to move, and the viewer does not check GPS fix accuracy. It also does not reconstruct movement missed during a network interruption.
+
+**The live viewer does not save its readings.** Export the recording from phyphox if you need to keep the original phone data. Those exports need conversion before the separate CSV analyzer can read them; that converter is not included.
+
+The window indicates when phyphox is paused or a request fails. After three consecutive failed requests, it stops polling. It also stops if it detects a change of experiment/session.
+
+## Analyzing a CSV
+
+To try the supplied sample:
+
+```matlab
+result = ccr_analyzer('sample_SYNTHETIC.csv');
+```
+
+For a prepared recording:
+
+```matlab
+result = ccr_analyzer('my_run.csv');
+```
+
+The CSV needs one header row and these columns:
+
+| Column | Meaning | Accepted values |
+|---|---|---|
+| `time_s` | Time in seconds | Nonnegative, strictly increasing |
+| `speed_kmh` | Speed in km/h | 0 to 300 |
 | `latitude_deg` | WGS84 latitude in decimal degrees | −90 to +90 |
 | `longitude_deg` | WGS84 longitude in decimal degrees | −180 to +180 |
-| `lateral_g` | Signed lateral acceleration divided by standard gravity | −5 to +5 |
-| `is_synthetic` | Provenance flag for every row | All 1 for synthetic; all 0 for user-declared measured data |
+| `lateral_g` | Signed lateral acceleration in g | −5 to +5 |
+| `is_synthetic` | Data origin flag | All `1` for synthetic, or all `0` for user-declared measured data |
 
-The range limits are sanity checks for this FSAE project, not car performance limits. The program checks names, numeric content, bounds and timestamps. It **cannot prove the physical units or provenance** of numbers from a header. You must verify those before import. A CSV marked 0 is labeled “IMPORTED DATA — USER DECLARED NON-SYNTHETIC”; this is not independent verification.
+Headers are case sensitive. Required columns may appear in any order; extra columns are ignored. Use commas as separators and periods as decimal points. Do not include a separate units row.
 
-At least three rows are required. Blanks, NaN, infinity, duplicate or reversed timestamps, and mixed provenance flags are rejected. Missing columns produce an error. No sorting, interpolation, smoothing, missing-data filling or automatic unit guessing takes place. Fix problems in a copy of the source log. A timestamp gap greater than five times the median interval produces a warning; integration still spans that gap. GPS positions of (0,0) and paths spanning more than 0.1 degree produce warnings requiring inspection. Invalid GPS fixes inside legal coordinate bounds cannot be reliably detected by this format.
+At least three samples are required. The validator rejects missing or non-finite values, duplicate or reversed timestamps, out-of-range values, and mixed data-origin flags. It warns about large time gaps, unusually large GPS extents, and coordinates at `(0,0)`.
 
-Convert before saving:
+The code does not sort, fill gaps, smooth signals, synchronize channels, or guess units. The headers declare the units, but cannot prove that the numbers use those units. Check and convert the source data first. Marking a file as measured data is your declaration, not verification by the program.
 
-- m/s → km/h: multiply by 3.6.
-- mph → km/h: multiply by 1.609344.
-- milliseconds → seconds: divide by 1000.
-- lateral acceleration in m/s² → g: divide by 9.80665.
-- Latitude/longitude must be decimal degrees, not degrees/minutes/seconds or metre coordinates.
+Useful conversions:
 
-For measured data, adopt positive lateral g for left turns and negative for right turns, and document any axis/sign correction you make. The analyzer plots the supplied sign without changing it. An accelerometer requires mounting orientation and calibration; tilt, banking, gravity projection, vibration and bias can affect its lateral channel. Do not substitute total acceleration magnitude for lateral acceleration.
+```text
+Speed in m/s × 3.6 = speed in km/h
+Speed in mph × 1.609344 = speed in km/h
+Acceleration in m/s² ÷ 9.80665 = acceleration in g
+Time in milliseconds ÷ 1000 = time in seconds
+```
 
-## Dashboard
+Lateral g is a supplied input, not a value calculated from the GPS path. For consistent comparisons, document your sensor orientation and use a consistent left/right sign convention.
 
-1. **Vehicle speed:** speed against elapsed time from the first sample.
-2. **Signed cornering g:** supplied lateral-g channel against the same time axis.
-3. **GPS path:** north/east offsets from the first fix, coloured by speed. Green circle is the start; red cross is the end. This is a local path plot, not a satellite map. Latitude/longitude remain in the exported CSV.
-4. **Speed vs cornering g:** one point per sample, coloured by elapsed time. This helps inspect how cornering acceleration changes with speed; it is not a tire friction envelope or a handling diagnosis.
+## Metrics and saved results
 
-The local projection uses a spherical Earth radius of 6,371,000 m and longitude scaling at the first latitude. It suits a small track at mid-latitudes. Large regions, polar coordinates, poor GPS fixes and discontinuities can distort the plot. Plot connections do not establish continuous GPS coverage.
+The CSV/demo analyzer calculates sample count, duration, maximum speed, time-weighted mean speed, speed-integrated distance, peak absolute lateral g, signed maximum and minimum lateral g, RMS lateral g, median sample interval, and largest sample gap.
 
-## Metrics and exports
+Distance is calculated by integrating speed over time; it is not distance measured from GPS coordinates. Time-weighted calculations use the actual sample intervals. Large gaps and sensor spikes can distort the results, so inspect the traces before relying on a summary value.
 
-Each unique run directory contains:
+Each analyzer run creates a separate output folder containing:
 
-- `processed_telemetry.csv`: validated required columns, with original timestamps, units and provenance retained.
-- `metrics.csv`: metric name, numerical value and unit.
-- `run_info.txt`: provenance label, source path, creation time and calculation notes.
-- `dashboard.png`: shareable dashboard image with provenance banner.
-- `dashboard.fig`: MATLAB figure; reopen using `openfig('full/path/dashboard.fig')`.
-
-Metrics are sample count, duration (`last time − first time`), maximum speed, time-weighted mean speed, speed-integrated distance, peak absolute lateral g, maximum/minimum signed lateral g, time-weighted RMS lateral g, median sample interval and largest sample gap.
-
-`trapz` integrates adjacent samples using trapezoids and actual timestamps. Mean speed is integrated speed divided by duration. Distance integrates km/h divided by 3.6 over seconds, giving metres; it is **not GPS distance**. RMS g is the square root of the time average of squared lateral g. Peak values are raw sample peaks and are sensitive to spikes. Signed extrema are not separately classified left/right cornering peaks when a run only contains one sign. No lap times, turn detection, performance comparisons or inferred limits are calculated.
-
-## How the synthetic data works
-
-`ccr_generate_demo` creates 1,201 samples at 10 Hz over 120 seconds. Speed varies smoothly between 7 and 13 m/s (25.2–46.8 km/h) with a 30-second period. The car follows a flat, counterclockwise circle of radius 45 m. Angular position integrates speed/radius. Lateral g equals `speed_mps^2 / (45 * 9.80665)`, so it is always positive. The arbitrary origin near 40° N, 77° W is not a surveyed CCR track.
-
-This ideal kinematic demonstration has no tire, suspension, road, GPS-noise or accelerometer model. It is useful for learning the interface and checking calculations, not evaluating CCR's vehicle or predicting safe speed. Expected duration is 120 s, integrated distance 1,200 m, maximum speed 46.8 km/h and peak lateral g approximately 0.38296. The supplied sample CSV uses the same equations and rounded numeric values; tiny differences from newly generated data are normal.
-
-## Every code component
-
-| File | Responsibility |
+| Output | Contents |
 |---|---|
-| `run_demo.m` | Beginner entry script; clears workspace/Command Window and runs demo, storing `result`. |
-| `ccr_analyzer.m` | Public entry function. Generates or reads data, assigns numeric import types, validates, calculates metrics, creates a unique output directory, exports tables/notes/plots, and returns a struct. |
-| `ccr_generate_demo.m` | Deterministic synthetic GPS/speed/g generator; no random seed or toolbox needed. |
-| `ccr_validate.m` | Enforces the CSV schema, numerical ranges, timestamps and provenance; warns on time gaps and suspicious GPS extent/fixes. Returns canonical columns only. |
-| `ccr_metrics.m` | Calculates statistics using real time intervals; returns a three-column table. Call after validation. |
-| `ccr_plot.m` | Builds four dashboard panels using base MATLAB graphics and local GPS coordinates. Call after validation. |
-| `ccr_self_test.m` | Checks known demo results, import round trip, output creation and rejection of several malformed inputs. Uses a temporary folder and removes only that test folder afterward. |
-| `sample_SYNTHETIC.csv` | Ready-to-import synthetic example with the exact required header and provenance flag. |
-| `TEST_REPORT.md` | Records checks actually performed in the delivery environment and runtime limitations. |
+| `processed_telemetry.csv` | Validated required columns |
+| `metrics.csv` | Metric names, values, and units |
+| `run_info.txt` | Data origin, source, creation time, and calculation notes |
+| `dashboard.png` | Dashboard image |
+| `dashboard.fig` | Figure that can be reopened in MATLAB |
 
-The public entry point is `ccr_analyzer`. Helper functions are separated so you can understand and extend one responsibility at a time. Errors use `CCR:` identifiers, which let the self-test verify the reason an input was rejected. `onCleanup` closes the notes file even if writing fails. Previous run outputs are preserved. If plotting/export fails, partial files can remain in the new run folder; do not treat those as a completed run.
+These exports apply to `ccr_analyzer`, not the live phone viewer. A failed export may leave a partially written results folder.
 
-## Using real Haltech Nexus R5 data later
+You can choose another output location:
 
-Haltech describes the Nexus R5 as including a data logger: https://www.haltech.com/product/ht-195000-nexus-r5-vcu/ . That does not establish the CSV layout of your installed software or guarantee the required GPS channels are present. Confirm your team's actual GPS source, speed source, lateral channel, calibration, logging configuration and synchronization.
+```matlab
+result = ccr_analyzer('my_run.csv', 'my_results');
+```
 
-This project is a **canonical CSV importer**, not a native Haltech log parser. No recorded CCR export was available to verify. It does not read proprietary/binary logs, connect to an R5, decode CAN, or assume specific NSP channel names or export menu options. Consult the documentation for your installed Haltech software for log retrieval and export. If it can produce tabular CSV, work on a copy, map its channels into the required columns, convert units, remove metadata/units rows, and save a comma-delimited CSV. If it cannot, obtain a documented supported conversion route before importing. Do not rename a binary log to `.csv`.
+The returned structure contains `result.data`, `result.metrics`, and `result.outputDirectory`.
 
-Make a channel mapping record containing original name, original unit, conversion, sensor source, sign convention and time reference. Different channels can log at different rates; do not simply combine unrelated rows. Align them to a common timebase using a deliberate documented method before this importer, and inspect gaps/fix validity. The program does not perform synchronization. Preserve the unmodified original log for audit and troubleshooting.
+## About the demo data
 
-When the first real export arrives, adapt a separate converter to that exact verified format. The canonical importer and analysis functions can then remain stable. Future RPM/throttle/brake additions can be developed later without adding those requirements now.
+The generator creates 120 seconds of ideal motion at 10 Hz: 1,201 samples on a flat, counterclockwise circle with a 45 m radius. Speed varies between 25.2 and 46.8 km/h. Lateral acceleration follows `v² / radius`, then converts to g.
+
+Expected checks include a 120-second duration, 1,200 m of speed-integrated distance, and a maximum speed of 46.8 km/h. The GPS origin is arbitrary and does not describe a surveyed CCR track.
+
+This is a calculation and plotting example. It does not model tires, suspension, road conditions, or sensor noise, and should not be used to predict the car’s performance.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `ccr_phone_live_fixed.m` | Current live phone viewer with automatic channel selection |
+| `ccr_phone_live.m` | Earlier viewer with manual channel selection; use the fixed version for the setup above |
+| `run_demo.m` | Starts the synthetic demo; clears the workspace and Command Window |
+| `ccr_analyzer.m` | Runs the demo or imports a CSV, calculates metrics, and exports results |
+| `ccr_generate_demo.m` | Generates the synthetic data |
+| `ccr_validate.m` | Checks required columns and values |
+| `ccr_metrics.m` | Calculates summary measurements |
+| `ccr_plot.m` | Builds the CSV/demo dashboard |
+| `ccr_self_test.m` | Tests the demo calculations, CSV round trip, exports, and selected invalid inputs |
+| `sample_SYNTHETIC.csv` | Example input in the analyzer’s format |
+| `TEST_REPORT.md` | Records the original delivery checks and their limits |
+| `START_HERE.md` | Earlier quick-start guide; use this README for the current fixed viewer |
+
+If your download contains only the original analyzer files, you can run the demo and CSV workflow. The phone instructions also require `ccr_phone_live_fixed.m`.
 
 ## Troubleshooting
 
-- **Undefined function:** MATLAB is in the wrong folder; navigate to the folder containing the `.m` files.
-- **Missing columns:** compare the first CSV line with the required header, including capitalization and unit suffixes. Remove vendor preamble and unit rows in a copy.
-- **Numeric error:** check for blanks, text units in data cells, missing-value markers and nonnumeric timestamps.
-- **Time error:** verify seconds, remove duplicates deliberately and check ordering in the original log. The app will not silently sort.
-- **Speed/g range error:** verify unit conversion and sensor calibration before changing limits.
-- **No useful GPS path:** check valid fixes, correct decimal degrees and lat/lon order. Constant coordinates are accepted but show a point.
-- **Cannot write files:** choose a writable output directory and check free storage.
-- **Graphics error:** run in MATLAB with graphics support. The invisible export mode still requires graphics.
+**MATLAB cannot find the function:** Set Current Folder to the directory containing the `.m` files. Enter commands in the Command Window, not inside the function file.
 
-No installation of Signal Processing, Mapping, Vehicle Network or other toolboxes is needed for this version.
+**“Execution of script as a function is not supported”:** Restore a clean copy of the file. The first line of the fixed viewer must be `function ccr_phone_live_fixed(phoneURL)`, and its filename must remain `ccr_phone_live_fixed.m`. Do not paste run commands above the function definition.
+
+**Cannot connect:** Check the current phyphox address in the laptop browser. Keep phyphox open with remote access enabled. Check the network connection and any port number. If the browser works but MATLAB fails on a Mac, check MATLAB’s Local Network permission in System Settings. During setup, launching MATLAB from Terminal allowed one session to reach the channel-selection stage; that is a troubleshooting observation, not a guaranteed fix.
+
+**Required channels are missing:** Check that the active phone experiment includes both GPS and linear acceleration and uses the names listed above.
+
+**Acceleration stays near zero:** That is expected when the phone is stationary. Confirm phyphox is recording and gently move the phone to check the signal. GPS speed may still be unavailable indoors.
+
+**CSV import fails:** Compare the headers and units with the table above. A raw phyphox export is not automatically compatible with this format. Preserve the original recording and prepare a separate converted copy.
+
+## Testing and next steps
+
+Run the included analyzer checks in MATLAB with:
+
+```matlab
+ccr_self_test
+```
+
+These checks cover the demo and CSV analyzer, not live networking, phone calibration, or track accuracy. The original delivery environment did not have MATLAB installed. During manual setup, the demo ran and phone configuration could be retrieved, but that does not establish a completed validation of the fixed live viewer.
+
+Further work includes testing the live plots on a recorded route, comparing readings against reference measurements, saving live data with sensor timestamps, and adding a phone-export converter.
+
+Sending data from a car on cellular service to a laptop on campus Wi-Fi requires an internet relay. That relay is not implemented here. This version also has no direct Haltech connection, native log parser, lap timing, or additional engine channels.
+
+## Development
+
+This project was developed with substantial ChatGPT assistance for code and documentation. It is being used to learn MATLAB and explore telemetry for Capital College Racing. The code and measurements still need to be understood, tested, and checked against the team’s actual equipment before being used for engineering decisions.
